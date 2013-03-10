@@ -1,29 +1,41 @@
 """
-Linkedin OAuth support
+Linkedin OAuth/OAuth2 support
 
 No extra configurations are needed to make this work.
 """
 from xml.etree import ElementTree
 from xml.parsers.expat import ExpatError
+from urllib import urlencode, urlopen
 
 from oauth2 import Token
+from django.utils import simplejson
 
 from social_auth.utils import setting
-from social_auth.backends import ConsumerBasedOAuth, OAuthBackend
+from social_auth.backends import (
+    ConsumerBasedOAuth,
+    BaseOAuth2,
+    OAuthBackend,
+)
 from social_auth.exceptions import AuthCanceled, AuthUnknownError
 
-
+#OAUTH
 LINKEDIN_SERVER = 'linkedin.com'
 LINKEDIN_REQUEST_TOKEN_URL = 'https://api.%s/uas/oauth/requestToken' % \
-                                    LINKEDIN_SERVER
+                             LINKEDIN_SERVER
 LINKEDIN_ACCESS_TOKEN_URL = 'https://api.%s/uas/oauth/accessToken' % \
-                                    LINKEDIN_SERVER
+                            LINKEDIN_SERVER
 LINKEDIN_AUTHORIZATION_URL = 'https://www.%s/uas/oauth/authenticate' % \
-                                    LINKEDIN_SERVER
+                             LINKEDIN_SERVER
 LINKEDIN_CHECK_AUTH = 'https://api.%s/v1/people/~' % LINKEDIN_SERVER
 # Check doc at http://developer.linkedin.com/docs/DOC-1014 about how to use
 # fields selectors to retrieve extra user data
 LINKEDIN_FIELD_SELECTORS = ['id', 'first-name', 'last-name']
+
+# OAUTH2
+LINKEDIN2_AUTHORIZATION_URL = 'https://www.linkedin.com/uas/oauth2/authorization'
+LINKEDIN2_ACCESS_TOKEN_URL = 'https://www.linkedin.com/uas/oauth2/accessToken'
+LINKEDIN2_USER_DATA_URL = 'https://api.linkedin.com/v1/people/~'
+LINKEDIN2_SERVER = 'api.linkedin.com'
 
 
 class LinkedinBackend(OAuthBackend):
@@ -124,7 +136,58 @@ def to_dict(xml):
         return out
 
 
+class Linkedin2Backend(OAuthBackend):
+    """Linkedin2 OAuth authentication backend"""
+    name = 'linkedin-oauth2'
+    # Default extra data to store
+    EXTRA_DATA = [
+        ('id', 'id'),
+        ('expires', setting('SOCIAL_AUTH_EXPIRATION', 'expires'))
+    ]
+
+    def get_user_id(self, details, response):
+        print "get_user_id", details, response
+        return
+
+    def get_user_details(self, response):
+        """Return user details from Linkedin2 account"""
+        print response
+        return {'username': response.get('login'),
+                'email': response.get('email') or '',
+                'first_name': response.get('name')}
+
+    @classmethod
+    def enabled(cls):
+        return True
+
+
+class Linkedin2Auth(BaseOAuth2):
+    """Linkedin2 OAuth2 mechanism"""
+    AUTHORIZATION_URL = LINKEDIN2_AUTHORIZATION_URL
+    ACCESS_TOKEN_URL = LINKEDIN2_ACCESS_TOKEN_URL
+    SERVER_URL = LINKEDIN2_SERVER
+    AUTH_BACKEND = Linkedin2Backend
+    SETTINGS_KEY_NAME = 'LINKEDIN2_API_KEY'
+    SETTINGS_SECRET_NAME = 'LINKEDIN2_API_SECRET'
+    SCOPE_SEPARATOR = ','
+
+    def get_scope(self):
+        """Return list with needed access scope"""
+        return setting('LINKEDIN2_EXTENDED_PERMISSIONS', [])
+
+    def user_data(self, access_token, *args, **kwargs):
+        """Loads user data from service"""
+        url = LINKEDIN2_USER_DATA_URL + '?' + urlencode({
+            'oauth2_access_token': access_token
+        })
+        try:
+            return simplejson.load(urlopen(url))
+        except ValueError:
+            return None
+
+
 # Backend definition
 BACKENDS = {
     'linkedin': LinkedinAuth,
+    'linkedin-oauth2': Linkedin2Auth,
 }

@@ -112,6 +112,10 @@ def complete_process(request, backend, *args, **kwargs):
     except IntegrityError:
         url = setting('SIGNUP_ERROR_URL', setting('LOGIN_ERROR_URL'))
         return HttpResponseRedirect(url)
+    except AuthCanceled:        
+        url = setting('SOCIAL_AUTH_BACKEND_ERROR_URL', setting('LOGIN_ERROR_URL'))
+        return HttpResponseRedirect(url)
+    
 
     if isinstance(user, HttpResponse):
         return user
